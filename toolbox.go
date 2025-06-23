@@ -173,6 +173,11 @@ func (Toolbox) GetCPUUsage() (float64, error) {
 	return cpuInfo.UsagePercent, nil
 }
 
+// GetCPULimit returns the CPU limit in cores
+func (Toolbox) GetCPULimit() (float64, error) {
+	return getCPULimit()
+}
+
 // GetMemoryUsage returns current memory usage in bytes
 func (Toolbox) GetMemoryUsage() (int64, error) {
 	memInfo, err := getMemoryInfoCgroup()
@@ -183,6 +188,47 @@ func (Toolbox) GetMemoryUsage() (int64, error) {
 		}
 	}
 	return memInfo.UsageBytes, nil
+}
+
+// GetMemoryLimit returns the memory limit in bytes
+func (Toolbox) GetMemoryLimit() (int64, error) {
+	return getMemoryLimit()
+}
+
+// GetMemoryUsagePercent returns memory usage as a percentage
+func (Toolbox) GetMemoryUsagePercent() (float64, error) {
+	memInfo, err := getMemoryInfoCgroup()
+	if err != nil {
+		memInfo, err = getMemoryInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+	}
+	return memInfo.UsagePercent, nil
+}
+
+// GetAvailableMemory returns available memory in bytes
+func (Toolbox) GetAvailableMemory() (int64, error) {
+	memInfo, err := getMemoryInfoCgroup()
+	if err != nil {
+		memInfo, err = getMemoryInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+	}
+	return memInfo.AvailableBytes, nil
+}
+
+// GetAvailableCPU returns available CPU cores
+func (Toolbox) GetAvailableCPU() (float64, error) {
+	cpuInfo, err := getCPUInfoCgroup()
+	if err != nil {
+		cpuInfo, err = getCPUInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+	}
+	return cpuInfo.Available, nil
 }
 
 // Command-based implementations

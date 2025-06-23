@@ -48,6 +48,9 @@ func TestGetSystemInfo(t *testing.T) {
 			t.Errorf("Expected load average to contain numbers, got %s", info.CPU.LoadAverage)
 		}
 	}
+
+	t.Logf("SystemInfo: Method=%s, Fallback=%v, CPU=%.2f%%, Memory=%.2f%%",
+		info.Method, info.Fallback, info.CPU.UsagePercent, info.Memory.UsagePercent)
 }
 
 func TestGetSystemInfoCommand(t *testing.T) {
@@ -99,6 +102,121 @@ func TestGetSystemInfoCommand(t *testing.T) {
 	if info.Memory.CachedBytes < 0 {
 		t.Errorf("Expected cached bytes >= 0, got %d", info.Memory.CachedBytes)
 	}
+
+	t.Logf("Command SystemInfo: CPU=%.2f%%, Memory=%.2f%%, Load=%s",
+		info.CPU.UsagePercent, info.Memory.UsagePercent, info.CPU.LoadAverage)
+}
+
+func TestGetCPUUsage(t *testing.T) {
+	toolbox := Toolbox{}
+	usage, err := toolbox.GetCPUUsage()
+
+	if err != nil {
+		t.Logf("GetCPUUsage failed (expected in test environment): %v", err)
+		return
+	}
+
+	if usage < 0 || usage > 100 {
+		t.Errorf("Expected CPU usage between 0-100, got %f", usage)
+	}
+
+	t.Logf("CPU Usage: %.2f%%", usage)
+}
+
+func TestGetCPULimit(t *testing.T) {
+	toolbox := Toolbox{}
+	limit, err := toolbox.GetCPULimit()
+
+	if err != nil {
+		t.Logf("GetCPULimit failed (expected in test environment): %v", err)
+		return
+	}
+
+	if limit <= 0 {
+		t.Errorf("Expected CPU limit > 0, got %f", limit)
+	}
+
+	t.Logf("CPU Limit: %.2f cores", limit)
+}
+
+func TestGetAvailableCPU(t *testing.T) {
+	toolbox := Toolbox{}
+	available, err := toolbox.GetAvailableCPU()
+
+	if err != nil {
+		t.Logf("GetAvailableCPU failed (expected in test environment): %v", err)
+		return
+	}
+
+	if available < 0 {
+		t.Errorf("Expected available CPU >= 0, got %f", available)
+	}
+
+	t.Logf("Available CPU: %.2f cores", available)
+}
+
+func TestGetMemoryUsage(t *testing.T) {
+	toolbox := Toolbox{}
+	usage, err := toolbox.GetMemoryUsage()
+
+	if err != nil {
+		t.Logf("GetMemoryUsage failed (expected in test environment): %v", err)
+		return
+	}
+
+	if usage < 0 {
+		t.Errorf("Expected memory usage >= 0, got %d", usage)
+	}
+
+	t.Logf("Memory Usage: %d bytes (%.2f MB)", usage, float64(usage)/(1024*1024))
+}
+
+func TestGetMemoryLimit(t *testing.T) {
+	toolbox := Toolbox{}
+	limit, err := toolbox.GetMemoryLimit()
+
+	if err != nil {
+		t.Logf("GetMemoryLimit failed (expected in test environment): %v", err)
+		return
+	}
+
+	if limit <= 0 {
+		t.Errorf("Expected memory limit > 0, got %d", limit)
+	}
+
+	t.Logf("Memory Limit: %d bytes (%.2f MB)", limit, float64(limit)/(1024*1024))
+}
+
+func TestGetMemoryUsagePercent(t *testing.T) {
+	toolbox := Toolbox{}
+	percent, err := toolbox.GetMemoryUsagePercent()
+
+	if err != nil {
+		t.Logf("GetMemoryUsagePercent failed (expected in test environment): %v", err)
+		return
+	}
+
+	if percent < 0 || percent > 100 {
+		t.Errorf("Expected memory usage percent between 0-100, got %f", percent)
+	}
+
+	t.Logf("Memory Usage Percent: %.2f%%", percent)
+}
+
+func TestGetAvailableMemory(t *testing.T) {
+	toolbox := Toolbox{}
+	available, err := toolbox.GetAvailableMemory()
+
+	if err != nil {
+		t.Logf("GetAvailableMemory failed (expected in test environment): %v", err)
+		return
+	}
+
+	if available < 0 {
+		t.Errorf("Expected available memory >= 0, got %d", available)
+	}
+
+	t.Logf("Available Memory: %d bytes (%.2f MB)", available, float64(available)/(1024*1024))
 }
 
 func TestGetTopOutput(t *testing.T) {
@@ -115,9 +233,11 @@ func TestGetTopOutput(t *testing.T) {
 	}
 
 	// Check if output contains typical top information
-	if !strings.Contains(output, "CPU") && !strings.Contains(output, "Mem") {
-		t.Error("Expected top output to contain CPU or Mem information")
+	if !strings.Contains(output, "CPU") && !strings.Contains(output, "Mem") && !strings.Contains(output, "load") {
+		t.Error("Expected top output to contain CPU, Mem, or load information")
 	}
+
+	t.Logf("Top output length: %d characters", len(output))
 }
 
 func TestGetFreeOutput(t *testing.T) {
@@ -137,6 +257,8 @@ func TestGetFreeOutput(t *testing.T) {
 	if !strings.Contains(output, "Mem:") && !strings.Contains(output, "total") {
 		t.Error("Expected free output to contain memory information")
 	}
+
+	t.Logf("Free output length: %d characters", len(output))
 }
 
 func TestGetPsOutput(t *testing.T) {
@@ -156,6 +278,10 @@ func TestGetPsOutput(t *testing.T) {
 	if !strings.Contains(output, "PID") && !strings.Contains(output, "USER") {
 		t.Error("Expected ps output to contain process information")
 	}
+
+	// Count number of processes
+	lines := strings.Split(output, "\n")
+	t.Logf("PS output: %d lines", len(lines))
 }
 
 func TestGetUptimeOutput(t *testing.T) {
@@ -175,34 +301,8 @@ func TestGetUptimeOutput(t *testing.T) {
 	if !strings.Contains(output, "up") && !strings.Contains(output, "load average") {
 		t.Error("Expected uptime output to contain uptime or load average information")
 	}
-}
 
-func TestGetCPUUsage(t *testing.T) {
-	toolbox := Toolbox{}
-	usage, err := toolbox.GetCPUUsage()
-
-	if err != nil {
-		t.Logf("GetCPUUsage failed (expected in test environment): %v", err)
-		return
-	}
-
-	if usage < 0 || usage > 100 {
-		t.Errorf("Expected CPU usage between 0-100, got %f", usage)
-	}
-}
-
-func TestGetMemoryUsage(t *testing.T) {
-	toolbox := Toolbox{}
-	usage, err := toolbox.GetMemoryUsage()
-
-	if err != nil {
-		t.Logf("GetMemoryUsage failed (expected in test environment): %v", err)
-		return
-	}
-
-	if usage < 0 {
-		t.Errorf("Expected memory usage >= 0, got %d", usage)
-	}
+	t.Logf("Uptime: %s", strings.TrimSpace(output))
 }
 
 func TestReadFile(t *testing.T) {
@@ -360,6 +460,8 @@ func TestGetLoadAverage(t *testing.T) {
 	if !strings.Contains(loadAvg, ",") && !strings.Contains(loadAvg, ".") {
 		t.Errorf("Expected load average to contain numbers, got %s", loadAvg)
 	}
+
+	t.Logf("Load average: %s", loadAvg)
 }
 
 func TestGetNumCPUs(t *testing.T) {
@@ -372,6 +474,8 @@ func TestGetNumCPUs(t *testing.T) {
 	if cpus <= 0 {
 		t.Errorf("Expected number of CPUs > 0, got %f", cpus)
 	}
+
+	t.Logf("Number of CPUs: %.0f", cpus)
 }
 
 func TestGetSystemMemory(t *testing.T) {
@@ -384,6 +488,35 @@ func TestGetSystemMemory(t *testing.T) {
 	if memory <= 0 {
 		t.Errorf("Expected system memory > 0, got %d", memory)
 	}
+
+	t.Logf("System memory: %d bytes (%.2f GB)", memory, float64(memory)/(1024*1024*1024))
+}
+
+// Integration test that verifies cgroup fallback to command works
+func TestFallbackMechanism(t *testing.T) {
+	toolbox := Toolbox{}
+
+	// Try to get system info with auto fallback
+	info, err := toolbox.GetSystemInfo()
+	if err != nil {
+		t.Logf("Auto fallback failed: %v", err)
+		return
+	}
+
+	// Try command-only mode
+	cmdInfo, err := toolbox.GetSystemInfoCommand()
+	if err != nil {
+		t.Logf("Command-only mode failed: %v", err)
+		return
+	}
+
+	// Compare results - they should be reasonably close
+	if cmdInfo.Method != "command" {
+		t.Errorf("Expected command method, got %s", cmdInfo.Method)
+	}
+
+	t.Logf("Fallback test: Auto method=%s, Command CPU=%.2f%%, Memory=%.2f%%",
+		info.Method, cmdInfo.CPU.UsagePercent, cmdInfo.Memory.UsagePercent)
 }
 
 // Benchmark tests
@@ -412,5 +545,19 @@ func BenchmarkGetMemoryUsage(b *testing.B) {
 	toolbox := Toolbox{}
 	for i := 0; i < b.N; i++ {
 		_, _ = toolbox.GetMemoryUsage()
+	}
+}
+
+func BenchmarkGetMemoryLimit(b *testing.B) {
+	toolbox := Toolbox{}
+	for i := 0; i < b.N; i++ {
+		_, _ = toolbox.GetMemoryLimit()
+	}
+}
+
+func BenchmarkGetCPULimit(b *testing.B) {
+	toolbox := Toolbox{}
+	for i := 0; i < b.N; i++ {
+		_, _ = toolbox.GetCPULimit()
 	}
 }

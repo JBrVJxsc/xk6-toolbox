@@ -1,337 +1,296 @@
-# xk6-toolbox
+# K6 Toolbox Extension
 
-A k6 extension for monitoring system resources in containerized and non-containerized environments. This extension provides real-time access to CPU and memory usage information using multiple methods with automatic fallback, making it ideal for performance testing and resource monitoring in various environments.
+A comprehensive system monitoring extension for k6 that provides CPU and memory metrics in containerized environments, specifically designed for EKS/Docker deployments.
 
 ## Features
 
-- **Multi-Method Monitoring**: Automatically uses cgroup-based monitoring in containers and falls back to command-based monitoring
-- **CPU Monitoring**: Get current CPU usage, limits, available cores, and load average
-- **Memory Monitoring**: Get current memory usage, limits, available memory, buffers, and cache information
-- **Container-Aware**: Automatically detects and reads from cgroup v1 and v2
-- **Command Fallback**: Falls back to system commands (`top`, `free`, `ps`, `uptime`) when cgroups are not available
-- **Raw Command Output**: Access raw output from system monitoring commands
-- **Comprehensive API**: Both individual metrics and complete system information
+- 🔄 **Automatic Fallback**: Tries cgroup first, falls back to system commands
+- 📊 **Comprehensive Metrics**: CPU usage, memory usage, limits, and availability
+- 🐳 **Container-Aware**: Reads actual container limits from cgroup v1/v2
+- 🛡️ **Alpine Compatible**: Works with BusyBox commands in Alpine containers
+- ⚡ **Performance**: Optimized for minimal overhead
+- 📈 **Real-time**: Kernel-level accuracy for container resource monitoring
 
 ## Installation
 
-### Prerequisites
-
-- Go 1.19 or later
-- xk6 v0.20.1 or later
-- System commands: `top`, `free`, `ps`, `uptime`, `nproc` (for command-based monitoring)
-
-### Building k6 with the extension
+Build the k6 binary with the toolbox extension:
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/xk6-toolbox.git
-cd xk6-toolbox
-
-# Build k6 with the toolbox extension
-xk6 build v1.0.0 --with github.com/your-username/xk6-toolbox=./
+# Build k6 with toolbox extension
+xk6 build --with github.com/your-org/k6-toolbox-extension@latest
 ```
 
-## Usage
-
-### Basic Example
+## Quick Start
 
 ```javascript
 import toolbox from 'k6/x/toolbox';
 
-export default function () {
-  // Get comprehensive system information (auto-fallback)
-  const systemInfo = toolbox.getSystemInfo();
-  console.log('System Info:', JSON.stringify(systemInfo, null, 2));
-  
-  // Get individual metrics
-  const cpuUsage = toolbox.getCPUUsage();
-  const memoryUsage = toolbox.getMemoryUsage();
-  
-  console.log(`CPU Usage: ${cpuUsage}%`);
-  console.log(`Memory Usage: ${memoryUsage} bytes`);
-  console.log(`Collection Method: ${systemInfo.method}`);
-  console.log(`Used Fallback: ${systemInfo.fallback}`);
-}
-```
-
-### Command-Based Monitoring
-
-```javascript
-import toolbox from 'k6/x/toolbox';
-
-export default function () {
-  // Force command-based monitoring only
-  const info = toolbox.getSystemInfoCommand();
-  console.log('Command-based monitoring:', JSON.stringify(info, null, 2));
-  
-  // Get raw command outputs
-  const topOutput = toolbox.getTopOutput();
-  const freeOutput = toolbox.getFreeOutput();
-  const psOutput = toolbox.getPsOutput();
-  const uptimeOutput = toolbox.getUptimeOutput();
-  
-  console.log('Top output:', topOutput);
-  console.log('Free output:', freeOutput);
-  console.log('PS output:', psOutput);
-  console.log('Uptime output:', uptimeOutput);
-}
-```
-
-### Advanced Example
-
-```javascript
-import toolbox from 'k6/x/toolbox';
-import { check } from 'k6';
-
-export default function () {
-  // Get system information
-  const info = toolbox.getSystemInfo();
-  
-  // Check resource usage
-  check(info, {
-    'CPU usage is reasonable': (info) => info.cpu.usage_percent < 90,
-    'Memory usage is reasonable': (info) => info.memory.usage_percent < 85,
-    'CPU limit is set': (info) => info.cpu.limit_cores > 0,
-    'Memory limit is set': (info) => info.memory.limit_bytes > 0,
-    'Load average is available': (info) => info.cpu.load_average !== undefined,
-  });
-  
-  // Log detailed information
-  console.log(`CPU: ${info.cpu.used_cores.toFixed(2)}/${info.cpu.limit_cores.toFixed(2)} cores (${info.cpu.usage_percent.toFixed(1)}%)`);
-  console.log(`Memory: ${info.memory.usage_mb.toFixed(1)}/${info.memory.limit_mb.toFixed(1)} MB (${info.memory.usage_percent.toFixed(1)}%)`);
-  console.log(`Load Average: ${info.cpu.load_average}`);
-  console.log(`Free Memory: ${info.memory.free_bytes} bytes`);
-  console.log(`Buffer Memory: ${info.memory.buffer_bytes} bytes`);
-  console.log(`Cached Memory: ${info.memory.cached_bytes} bytes`);
-  console.log(`Collection Method: ${info.method}`);
-  
-  // Simulate some work
-  const start = Date.now();
-  while (Date.now() - start < 1000) {
-    // Do some CPU-intensive work
-  }
-}
-```
-
-### Resource Monitoring Test
-
-```javascript
-import toolbox from 'k6/x/toolbox';
-import { sleep } from 'k6';
-
-export const options = {
-  vus: 10,
-  duration: '30s',
-};
-
-export default function () {
-  // Monitor resources during test execution
-  const cpuUsage = toolbox.getCPUUsage();
-  const memoryUsage = toolbox.getMemoryUsage();
-  
-  // Get detailed info
-  const info = toolbox.getSystemInfo();
-  const memoryPercent = info.memory.usage_percent;
-  
-  // Log resource usage
-  console.log(`VU ${__VU}: CPU=${cpuUsage.toFixed(1)}%, Memory=${memoryPercent.toFixed(1)}%`);
-  console.log(`Load: ${info.cpu.load_average}, Method: ${info.method}`);
-  
-  // Check for resource constraints
-  if (cpuUsage > 95) {
-    console.warn(`High CPU usage detected: ${cpuUsage}%`);
-  }
-  
-  if (memoryPercent > 90) {
-    console.warn(`High memory usage detected: ${memoryPercent}%`);
-  }
-  
-  sleep(1);
+export default function() {
+    // Get complete system information
+    const info = toolbox.getSystemInfo();
+    console.log(`CPU: ${info.cpu.usage_percent}%, Memory: ${info.memory.usage_percent}%`);
+    
+    // Check if resources are available
+    if (info.memory.usage_percent > 80) {
+        console.warn(`High memory usage: ${info.memory.usage_mb}MB/${info.memory.limit_mb}MB`);
+    }
 }
 ```
 
 ## API Reference
 
-### Functions
+### System Overview
 
 #### `getSystemInfo()`
-Returns comprehensive system resource information with automatic fallback.
+Returns comprehensive system information with automatic fallback.
 
-**Returns:** `SystemInfo` object with the following structure:
 ```javascript
-{
-  cpu: {
-    usage_percent: number,    // CPU usage as percentage
-    limit_cores: number,      // CPU limit in cores
-    used_cores: number,       // Currently used CPU cores
-    available_cores: number,  // Available CPU cores
-    load_average: string      // System load average
-  },
-  memory: {
-    usage_bytes: number,      // Memory usage in bytes
-    limit_bytes: number,      // Memory limit in bytes
-    available_bytes: number,  // Available memory in bytes
-    usage_percent: number,    // Memory usage as percentage
-    usage_mb: number,         // Memory usage in MB
-    limit_mb: number,         // Memory limit in MB
-    available_mb: number,     // Available memory in MB
-    free_bytes: number,       // Free memory in bytes
-    buffer_bytes: number,     // Buffer memory in bytes
-    cached_bytes: number      // Cached memory in bytes
-  },
-  method: string,             // How data was collected ("cgroup", "command", "mixed")
-  fallback: boolean           // Whether fallback methods were used
-}
+const info = toolbox.getSystemInfo();
+// Returns: SystemInfo object with CPU, Memory, Method, Fallback fields
 ```
 
 #### `getSystemInfoCommand()`
-Forces using command-based monitoring only.
+Forces command-based monitoring (no cgroup files).
 
-**Returns:** `SystemInfo` object (same structure as above, but `method` will be "command" and `fallback` will be false)
+```javascript
+const info = toolbox.getSystemInfoCommand();
+// Returns: SystemInfo object using only system commands
+```
 
-#### `getCPUUsage()`
-Returns current CPU usage as a percentage.
+### CPU Metrics
 
-**Returns:** `number` - CPU usage percentage (0-100)
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `getCPUUsage()` | `float64` | Current CPU usage percentage (0-100) |
+| `getCPULimit()` | `float64` | CPU limit in cores |
+| `getAvailableCPU()` | `float64` | Available CPU cores (limit - usage) |
 
-#### `getMemoryUsage()`
-Returns current memory usage in bytes.
+### Memory Metrics
 
-**Returns:** `number` - Memory usage in bytes
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `getMemoryUsage()` | `int64` | Current memory usage in bytes |
+| `getMemoryLimit()` | `int64` | Memory limit in bytes |
+| `getMemoryUsagePercent()` | `float64` | Memory usage percentage (0-100) |
+| `getAvailableMemory()` | `int64` | Available memory in bytes |
 
-#### `getTopOutput()`
-Returns raw output from the `top` command.
+### Raw Command Output
 
-**Returns:** `string` - Raw top command output
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `getTopOutput()` | `string` | Raw `top -b -n 1` output |
+| `getFreeOutput()` | `string` | Raw `free -b` output |
+| `getPsOutput()` | `string` | Raw `ps aux` output |
+| `getUptimeOutput()` | `string` | Raw `uptime` output |
 
-#### `getFreeOutput()`
-Returns raw output from the `free` command.
+## Data Structures
 
-**Returns:** `string` - Raw free command output
+### SystemInfo
 
-#### `getPsOutput()`
-Returns raw output from the `ps aux` command.
+```javascript
+{
+    cpu: {
+        usage_percent: 45.2,      // Current CPU usage %
+        limit_cores: 4.0,         // CPU limit in cores
+        used_cores: 1.8,          // Currently used cores
+        available_cores: 2.2,     // Available cores
+        load_average: "1.2, 1.5, 1.8"  // System load average
+    },
+    memory: {
+        usage_bytes: 1073741824,   // Memory usage in bytes
+        limit_bytes: 2147483648,   // Memory limit in bytes
+        available_bytes: 1073741824,  // Available memory
+        usage_percent: 50.0,       // Memory usage %
+        usage_mb: 1024.0,         // Usage in MB
+        limit_mb: 2048.0,         // Limit in MB
+        available_mb: 1024.0,     // Available in MB
+        free_bytes: 536870912,    // Free memory (from free command)
+        buffer_bytes: 268435456,  // Buffer memory
+        cached_bytes: 268435456   // Cached memory
+    },
+    method: "cgroup",             // "cgroup", "command", or "mixed"
+    fallback: false               // Whether fallback was used
+}
+```
 
-**Returns:** `string` - Raw ps command output
+## Use Cases
 
-#### `getUptimeOutput()`
-Returns raw output from the `uptime` command.
+### Resource Monitoring During Load Tests
 
-**Returns:** `string` - Raw uptime command output
+```javascript
+import toolbox from 'k6/x/toolbox';
 
-## Monitoring Methods
+export default function() {
+    // Monitor resources every 10 iterations
+    if (__ITER % 10 === 0) {
+        const cpu = toolbox.getCPUUsage();
+        const memory = toolbox.getMemoryUsagePercent();
+        
+        console.log(`Iteration ${__ITER}: CPU=${cpu.toFixed(1)}%, Memory=${memory.toFixed(1)}%`);
+        
+        // Alert if resources are constrained
+        if (cpu > 90 || memory > 85) {
+            console.error(`⚠️  Resource constraint detected!`);
+        }
+    }
+    
+    // Your test logic here
+    // ...
+}
+```
 
-### Cgroup-Based Monitoring (Primary)
-- **CPU**: Reads from `/sys/fs/cgroup/cpu.max` (v2) or `/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us` (v1)
-- **Memory**: Reads from `/sys/fs/cgroup/memory.current` (v2) or `/sys/fs/cgroup/memory/memory.usage_in_bytes` (v1)
-- **Used in**: Container environments (Docker, Kubernetes, etc.)
+### Memory Usage Tracking
 
-### Command-Based Monitoring (Fallback)
-- **CPU**: Uses `top` command to parse CPU usage and `nproc` for core count
-- **Memory**: Uses `free` command to get memory statistics
-- **Load Average**: Uses `uptime` command
-- **Used in**: Non-container environments or when cgroups are not available
+```javascript
+import toolbox from 'k6/x/toolbox';
 
-### Automatic Fallback
-The extension automatically tries cgroup-based monitoring first, then falls back to command-based monitoring if cgroup files are not accessible.
+export function setup() {
+    const info = toolbox.getSystemInfo();
+    console.log(`Test starting with ${info.memory.available_mb.toFixed(0)}MB available memory`);
+    return { initialMemory: info.memory.usage_bytes };
+}
 
-## Container Support
+export default function(data) {
+    // Track memory growth
+    const currentMemory = toolbox.getMemoryUsage();
+    const memoryGrowth = currentMemory - data.initialMemory;
+    
+    if (memoryGrowth > 100 * 1024 * 1024) { // 100MB growth
+        console.warn(`Memory increased by ${(memoryGrowth / 1024 / 1024).toFixed(1)}MB`);
+    }
+}
+```
 
-This extension is designed to work in containerized environments and automatically detects:
+### Container Limits Validation
 
-- **cgroup v2**: Modern container runtimes (Docker 20.10+, containerd 1.4+)
-- **cgroup v1**: Legacy container runtimes
-- **Command fallback**: When cgroups are not available
+```javascript
+import toolbox from 'k6/x/toolbox';
 
-### Supported Container Runtimes
+export function setup() {
+    const info = toolbox.getSystemInfo();
+    
+    // Validate container has sufficient resources
+    const minCPU = 2.0;
+    const minMemoryGB = 4.0;
+    
+    if (info.cpu.limit_cores < minCPU) {
+        throw new Error(`Insufficient CPU: ${info.cpu.limit_cores} cores (need ${minCPU})`);
+    }
+    
+    if (info.memory.limit_mb < minMemoryGB * 1024) {
+        throw new Error(`Insufficient memory: ${info.memory.limit_mb}MB (need ${minMemoryGB * 1024}MB)`);
+    }
+    
+    console.log(`✅ Resource validation passed: ${info.cpu.limit_cores} cores, ${info.memory.limit_mb}MB`);
+    console.log(`📊 Detection method: ${info.method} ${info.fallback ? '(with fallback)' : ''}`);
+}
+```
 
-- Docker
-- containerd
-- CRI-O
-- Podman
-- Kubernetes (with any supported runtime)
+### Performance Regression Detection
 
-### Supported Commands
+```javascript
+import toolbox from 'k6/x/toolbox';
 
-For command-based monitoring, the following system commands are used:
-- `top` - CPU usage information
-- `free` - Memory usage information
-- `ps` - Process information
-- `uptime` - System load average
-- `nproc` - Number of CPU cores
+let previousCPU = 0;
+let cpuSpikes = 0;
+
+export default function() {
+    const currentCPU = toolbox.getCPUUsage();
+    
+    // Detect CPU spikes
+    if (currentCPU > previousCPU + 20) {
+        cpuSpikes++;
+        console.warn(`CPU spike detected: ${previousCPU.toFixed(1)}% → ${currentCPU.toFixed(1)}%`);
+    }
+    
+    previousCPU = currentCPU;
+}
+
+export function teardown() {
+    const finalInfo = toolbox.getSystemInfo();
+    console.log(`Test completed. CPU spikes: ${cpuSpikes}`);
+    console.log(`Final resource usage: CPU=${finalInfo.cpu.usage_percent.toFixed(1)}%, Memory=${finalInfo.memory.usage_percent.toFixed(1)}%`);
+}
+```
+
+## Environment Compatibility
+
+### Container Environments ✅
+- **EKS/Kubernetes**: Full cgroup v1/v2 support
+- **Docker**: Container-aware limits and usage
+- **Alpine Linux**: BusyBox command compatibility
+- **Ubuntu/Debian**: Full feature support
+
+### Fallback Chain
+1. **Primary**: cgroup v2 files (`/sys/fs/cgroup/memory.current`, etc.)
+2. **Secondary**: cgroup v1 files (`/sys/fs/cgroup/memory/memory.usage_in_bytes`, etc.)
+3. **Fallback**: System commands (`top`, `free`, `nproc`, `uptime`)
+
+### Required Permissions
+- ✅ Standard container permissions (no root required)
+- ✅ Read access to `/proc/` and `/sys/fs/cgroup/`
+- ✅ Basic command execution (`top`, `free`, `ps`, `uptime`)
 
 ## Error Handling
 
-The extension gracefully handles errors and provides meaningful error messages:
+The extension gracefully handles missing commands or files:
 
-- Missing cgroup files (expected in non-container environments)
-- Missing system commands (fallback to available commands)
-- Permission issues
-- Invalid data formats
-- System resource access failures
+```javascript
+// Always check for errors in production
+const usage = toolbox.getCPUUsage();
+if (usage === undefined) {
+    console.log("CPU monitoring not available in this environment");
+}
 
-## Development
-
-### Running Tests
-
-```bash
-# Run Go unit tests
-make test-go
-
-# Run k6 JavaScript tests
-make test-k6
-
-# Run all tests
-make test
+// Or use the comprehensive method with built-in fallback
+const info = toolbox.getSystemInfo();
+console.log(`Monitoring method: ${info.method}`);
+if (info.fallback) {
+    console.log("Using fallback monitoring - some metrics may be less accurate");
+}
 ```
-
-### Building
-
-```bash
-# Build k6 with extension
-make build
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite
-6. Submit a pull request
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Permission denied errors**: Ensure the container has access to `/sys/fs/cgroup` or system commands
-2. **No cgroup information**: The extension will automatically fall back to command-based monitoring
-3. **Missing system commands**: Install required commands (`top`, `free`, `ps`, `uptime`, `nproc`)
-4. **High CPU usage**: Consider reducing the frequency of resource checks
+**"Object has no member 'getMemoryLimit'"**
+- Ensure you're using the latest version with all public methods
+- Rebuild the k6 binary with the updated extension
 
-### Debug Mode
+**"failed to read cgroup files"**
+- Normal in non-containerized environments
+- Extension will automatically fall back to system commands
 
-Enable debug logging by setting the `K6_DEBUG` environment variable:
+**"command not found: nproc"**
+- Common in Alpine/BusyBox environments
+- Extension falls back to parsing `/proc/cpuinfo`
 
-```bash
-K6_DEBUG=true k6 run your-test.js
-```
-
-### Method Detection
-
-You can check which monitoring method is being used:
+### Debug Information
 
 ```javascript
+// Get detailed information about monitoring method
 const info = toolbox.getSystemInfo();
-console.log(`Using method: ${info.method}`);
-console.log(`Fallback used: ${info.fallback}`);
+console.log(`Method: ${info.method}, Fallback: ${info.fallback}`);
+
+// Get raw command output for debugging
+if (info.fallback) {
+    console.log("Raw top output:", toolbox.getTopOutput());
+    console.log("Raw free output:", toolbox.getFreeOutput());
+}
 ```
 
-## Examples
+## Performance Notes
 
-See the `examples/` directory for additional usage examples and test scenarios.
+- **Minimal Overhead**: Designed for production load testing
+- **File I/O**: ~1-2ms per metric read from cgroup files
+- **Command Execution**: ~10-50ms per system command (fallback only)
+- **Memory Impact**: Negligible - reads system metrics, doesn't store data
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
