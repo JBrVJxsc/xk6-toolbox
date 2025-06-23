@@ -3,6 +3,7 @@ package toolbox
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -35,6 +36,145 @@ func TestGetSystemInfo(t *testing.T) {
 	if info.Memory.UsagePercent < 0 || info.Memory.UsagePercent > 100 {
 		t.Errorf("Expected memory usage percent between 0-100, got %f", info.Memory.UsagePercent)
 	}
+
+	// Validate new fields
+	if info.Method == "" {
+		t.Error("Expected method to be set")
+	}
+
+	// Validate load average if available
+	if info.CPU.LoadAverage != "" {
+		if !strings.Contains(info.CPU.LoadAverage, ",") && !strings.Contains(info.CPU.LoadAverage, ".") {
+			t.Errorf("Expected load average to contain numbers, got %s", info.CPU.LoadAverage)
+		}
+	}
+}
+
+func TestGetSystemInfoCommand(t *testing.T) {
+	toolbox := Toolbox{}
+	info, err := toolbox.GetSystemInfoCommand()
+
+	// This should work in most environments since it uses system commands
+	if err != nil {
+		t.Logf("GetSystemInfoCommand failed: %v", err)
+		return
+	}
+
+	// Validate method is set to command
+	if info.Method != "command" {
+		t.Errorf("Expected method to be 'command', got %s", info.Method)
+	}
+
+	// Validate fallback is false for command method
+	if info.Fallback {
+		t.Error("Expected fallback to be false for command method")
+	}
+
+	// Validate CPU info
+	if info.CPU.LimitCores <= 0 {
+		t.Errorf("Expected CPU limit > 0, got %f", info.CPU.LimitCores)
+	}
+	if info.CPU.UsagePercent < 0 || info.CPU.UsagePercent > 100 {
+		t.Errorf("Expected CPU usage percent between 0-100, got %f", info.CPU.UsagePercent)
+	}
+
+	// Validate Memory info
+	if info.Memory.LimitBytes <= 0 {
+		t.Errorf("Expected memory limit > 0, got %d", info.Memory.LimitBytes)
+	}
+	if info.Memory.UsageBytes < 0 {
+		t.Errorf("Expected memory usage >= 0, got %d", info.Memory.UsageBytes)
+	}
+	if info.Memory.UsagePercent < 0 || info.Memory.UsagePercent > 100 {
+		t.Errorf("Expected memory usage percent between 0-100, got %f", info.Memory.UsagePercent)
+	}
+
+	// Validate new memory fields
+	if info.Memory.FreeBytes < 0 {
+		t.Errorf("Expected free bytes >= 0, got %d", info.Memory.FreeBytes)
+	}
+	if info.Memory.BufferBytes < 0 {
+		t.Errorf("Expected buffer bytes >= 0, got %d", info.Memory.BufferBytes)
+	}
+	if info.Memory.CachedBytes < 0 {
+		t.Errorf("Expected cached bytes >= 0, got %d", info.Memory.CachedBytes)
+	}
+}
+
+func TestGetTopOutput(t *testing.T) {
+	toolbox := Toolbox{}
+	output, err := toolbox.GetTopOutput()
+
+	if err != nil {
+		t.Logf("GetTopOutput failed (top command may not be available): %v", err)
+		return
+	}
+
+	if output == "" {
+		t.Error("Expected non-empty top output")
+	}
+
+	// Check if output contains typical top information
+	if !strings.Contains(output, "CPU") && !strings.Contains(output, "Mem") {
+		t.Error("Expected top output to contain CPU or Mem information")
+	}
+}
+
+func TestGetFreeOutput(t *testing.T) {
+	toolbox := Toolbox{}
+	output, err := toolbox.GetFreeOutput()
+
+	if err != nil {
+		t.Logf("GetFreeOutput failed (free command may not be available): %v", err)
+		return
+	}
+
+	if output == "" {
+		t.Error("Expected non-empty free output")
+	}
+
+	// Check if output contains memory information
+	if !strings.Contains(output, "Mem:") && !strings.Contains(output, "total") {
+		t.Error("Expected free output to contain memory information")
+	}
+}
+
+func TestGetPsOutput(t *testing.T) {
+	toolbox := Toolbox{}
+	output, err := toolbox.GetPsOutput()
+
+	if err != nil {
+		t.Logf("GetPsOutput failed (ps command may not be available): %v", err)
+		return
+	}
+
+	if output == "" {
+		t.Error("Expected non-empty ps output")
+	}
+
+	// Check if output contains process information
+	if !strings.Contains(output, "PID") && !strings.Contains(output, "USER") {
+		t.Error("Expected ps output to contain process information")
+	}
+}
+
+func TestGetUptimeOutput(t *testing.T) {
+	toolbox := Toolbox{}
+	output, err := toolbox.GetUptimeOutput()
+
+	if err != nil {
+		t.Logf("GetUptimeOutput failed (uptime command may not be available): %v", err)
+		return
+	}
+
+	if output == "" {
+		t.Error("Expected non-empty uptime output")
+	}
+
+	// Check if output contains uptime information
+	if !strings.Contains(output, "up") && !strings.Contains(output, "load average") {
+		t.Error("Expected uptime output to contain uptime or load average information")
+	}
 }
 
 func TestGetCPUUsage(t *testing.T) {
@@ -51,20 +191,6 @@ func TestGetCPUUsage(t *testing.T) {
 	}
 }
 
-func TestGetCPULimit(t *testing.T) {
-	toolbox := Toolbox{}
-	limit, err := toolbox.GetCPULimit()
-
-	if err != nil {
-		t.Logf("GetCPULimit failed (expected in test environment): %v", err)
-		return
-	}
-
-	if limit <= 0 {
-		t.Errorf("Expected CPU limit > 0, got %f", limit)
-	}
-}
-
 func TestGetMemoryUsage(t *testing.T) {
 	toolbox := Toolbox{}
 	usage, err := toolbox.GetMemoryUsage()
@@ -76,62 +202,6 @@ func TestGetMemoryUsage(t *testing.T) {
 
 	if usage < 0 {
 		t.Errorf("Expected memory usage >= 0, got %d", usage)
-	}
-}
-
-func TestGetMemoryLimit(t *testing.T) {
-	toolbox := Toolbox{}
-	limit, err := toolbox.GetMemoryLimit()
-
-	if err != nil {
-		t.Logf("GetMemoryLimit failed (expected in test environment): %v", err)
-		return
-	}
-
-	if limit <= 0 {
-		t.Errorf("Expected memory limit > 0, got %d", limit)
-	}
-}
-
-func TestGetMemoryUsagePercent(t *testing.T) {
-	toolbox := Toolbox{}
-	percent, err := toolbox.GetMemoryUsagePercent()
-
-	if err != nil {
-		t.Logf("GetMemoryUsagePercent failed (expected in test environment): %v", err)
-		return
-	}
-
-	if percent < 0 || percent > 100 {
-		t.Errorf("Expected memory usage percent between 0-100, got %f", percent)
-	}
-}
-
-func TestGetAvailableMemory(t *testing.T) {
-	toolbox := Toolbox{}
-	available, err := toolbox.GetAvailableMemory()
-
-	if err != nil {
-		t.Logf("GetAvailableMemory failed (expected in test environment): %v", err)
-		return
-	}
-
-	if available < 0 {
-		t.Errorf("Expected available memory >= 0, got %d", available)
-	}
-}
-
-func TestGetAvailableCPU(t *testing.T) {
-	toolbox := Toolbox{}
-	available, err := toolbox.GetAvailableCPU()
-
-	if err != nil {
-		t.Logf("GetAvailableCPU failed (expected in test environment): %v", err)
-		return
-	}
-
-	if available < 0 {
-		t.Errorf("Expected available CPU >= 0, got %f", available)
 	}
 }
 
@@ -206,6 +276,92 @@ func TestParseCgroupV2CPUUsage(t *testing.T) {
 	}
 }
 
+func TestParseTopCPUUsage(t *testing.T) {
+	// Test standard top output format
+	output := `top - 10:30:00 up 2 days, 20:45,  1 user,  load average: 0.52, 0.58, 0.59
+Tasks: 123 total,   1 running, 122 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  5.2 us,  2.1 sy,  0.0 ni, 92.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+MiB Mem :  16384.0 total,   8192.0 free,   4096.0 used,   4096.0 buff/cache`
+
+	usage, err := parseTopCPUUsage(output)
+	if err != nil {
+		t.Errorf("parseTopCPUUsage failed: %v", err)
+	}
+
+	expected := 100.0 - 92.7 // 100 - idle
+	epsilon := 0.001
+	if usage < expected-epsilon || usage > expected+epsilon {
+		t.Errorf("Expected CPU usage %f, got %f", expected, usage)
+	}
+
+	// Test alternative format
+	output2 := `CPU usage: 15.2% user, 8.1% system, 76.7% idle`
+	usage2, err := parseTopCPUUsage(output2)
+	if err != nil {
+		t.Errorf("parseTopCPUUsage failed on alternative format: %v", err)
+	}
+
+	expected2 := 100.0 - 76.7 // 100 - idle
+	if usage2 < expected2-epsilon || usage2 > expected2+epsilon {
+		t.Errorf("Expected CPU usage %f, got %f", expected2, usage2)
+	}
+
+	// Test invalid format
+	_, err = parseTopCPUUsage("invalid output")
+	if err == nil {
+		t.Error("Expected error for invalid top output")
+	}
+}
+
+func TestParseFreeCmdOutput(t *testing.T) {
+	// Test standard free output format
+	output := `              total        used        free      shared  buff/cache   available
+Mem:       16777216     8388608     4194304          0     4194304     8388608
+Swap:      16777216            0    16777216`
+
+	info, err := parseFreeCmdOutput(output)
+	if err != nil {
+		t.Errorf("parseFreeCmdOutput failed: %v", err)
+	}
+
+	// Validate parsed values
+	if info.LimitBytes != 16777216 {
+		t.Errorf("Expected total memory 16777216, got %d", info.LimitBytes)
+	}
+	if info.UsageBytes != 8388608 {
+		t.Errorf("Expected used memory 8388608, got %d", info.UsageBytes)
+	}
+	if info.FreeBytes != 4194304 {
+		t.Errorf("Expected free memory 4194304, got %d", info.FreeBytes)
+	}
+	if info.BufferBytes != 4194304 {
+		t.Errorf("Expected buffer memory 4194304, got %d", info.BufferBytes)
+	}
+
+	// Test invalid format
+	_, err = parseFreeCmdOutput("invalid output")
+	if err == nil {
+		t.Error("Expected error for invalid free output")
+	}
+}
+
+func TestGetLoadAverage(t *testing.T) {
+	loadAvg, err := getLoadAverage()
+	if err != nil {
+		t.Logf("getLoadAverage failed (uptime command may not be available): %v", err)
+		return
+	}
+
+	if loadAvg == "" {
+		t.Error("Expected non-empty load average")
+	}
+
+	// Load average should contain numbers
+	if !strings.Contains(loadAvg, ",") && !strings.Contains(loadAvg, ".") {
+		t.Errorf("Expected load average to contain numbers, got %s", loadAvg)
+	}
+}
+
 func TestGetNumCPUs(t *testing.T) {
 	cpus, err := getNumCPUs()
 	if err != nil {
@@ -235,6 +391,13 @@ func BenchmarkGetSystemInfo(b *testing.B) {
 	toolbox := Toolbox{}
 	for i := 0; i < b.N; i++ {
 		_, _ = toolbox.GetSystemInfo()
+	}
+}
+
+func BenchmarkGetSystemInfoCommand(b *testing.B) {
+	toolbox := Toolbox{}
+	for i := 0; i < b.N; i++ {
+		_, _ = toolbox.GetSystemInfoCommand()
 	}
 }
 

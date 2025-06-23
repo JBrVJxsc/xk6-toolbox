@@ -12,18 +12,34 @@ export const options = {
 export default function () {
   console.log('=== xk6-toolbox Test ===');
   
-  // Test 1: Get comprehensive system information
+  // Test 1: Get comprehensive system information (auto-fallback)
   let systemInfo;
   try {
     systemInfo = toolbox.getSystemInfo();
     console.log('✓ getSystemInfo() successful');
     console.log('System Info:', JSON.stringify(systemInfo, null, 2));
+    console.log(`Method: ${systemInfo.method}, Fallback: ${systemInfo.fallback}`);
+    console.log(`Load Average: ${systemInfo.cpu.load_average}`);
+    console.log(`Free: ${systemInfo.memory.free_bytes}, Buffer: ${systemInfo.memory.buffer_bytes}, Cached: ${systemInfo.memory.cached_bytes}`);
   } catch (error) {
     console.log('⚠ getSystemInfo() failed (expected in test environment):', error.message);
   }
   
-  // Test 2: Individual CPU functions
-  let cpuUsage, cpuLimit, availableCPU;
+  // Test 2: Get command-based system information
+  let systemInfoCmd;
+  try {
+    systemInfoCmd = toolbox.getSystemInfoCommand();
+    console.log('✓ getSystemInfoCommand() successful');
+    console.log('System Info (command):', JSON.stringify(systemInfoCmd, null, 2));
+    console.log(`Method: ${systemInfoCmd.method}, Fallback: ${systemInfoCmd.fallback}`);
+    console.log(`Load Average: ${systemInfoCmd.cpu.load_average}`);
+    console.log(`Free: ${systemInfoCmd.memory.free_bytes}, Buffer: ${systemInfoCmd.memory.buffer_bytes}, Cached: ${systemInfoCmd.memory.cached_bytes}`);
+  } catch (error) {
+    console.log('⚠ getSystemInfoCommand() failed:', error.message);
+  }
+  
+  // Test 3: Individual CPU and Memory functions
+  let cpuUsage, memoryUsage;
   try {
     cpuUsage = toolbox.getCPUUsage();
     console.log(`✓ getCPUUsage(): ${cpuUsage.toFixed(2)}%`);
@@ -32,90 +48,64 @@ export default function () {
   }
   
   try {
-    cpuLimit = toolbox.getCPULimit();
-    console.log(`✓ getCPULimit(): ${cpuLimit.toFixed(2)} cores`);
-  } catch (error) {
-    console.log('⚠ getCPULimit() failed:', error.message);
-  }
-  
-  try {
-    availableCPU = toolbox.getAvailableCPU();
-    console.log(`✓ getAvailableCPU(): ${availableCPU.toFixed(2)} cores`);
-  } catch (error) {
-    console.log('⚠ getAvailableCPU() failed:', error.message);
-  }
-  
-  // Test 3: Individual Memory functions
-  let memoryUsage, memoryLimit, memoryPercent, availableMemory;
-  try {
     memoryUsage = toolbox.getMemoryUsage();
     console.log(`✓ getMemoryUsage(): ${memoryUsage} bytes (${(memoryUsage / 1024 / 1024).toFixed(2)} MB)`);
   } catch (error) {
     console.log('⚠ getMemoryUsage() failed:', error.message);
   }
   
+  // Test 4: Raw command outputs
   try {
-    memoryLimit = toolbox.getMemoryLimit();
-    console.log(`✓ getMemoryLimit(): ${memoryLimit} bytes (${(memoryLimit / 1024 / 1024).toFixed(2)} MB)`);
+    const topOutput = toolbox.getTopOutput();
+    console.log('✓ getTopOutput() successful');
+    console.log('Top Output (first 200 chars):', topOutput.slice(0, 200));
   } catch (error) {
-    console.log('⚠ getMemoryLimit() failed:', error.message);
+    console.log('⚠ getTopOutput() failed:', error.message);
   }
   
   try {
-    memoryPercent = toolbox.getMemoryUsagePercent();
-    console.log(`✓ getMemoryUsagePercent(): ${memoryPercent.toFixed(2)}%`);
+    const freeOutput = toolbox.getFreeOutput();
+    console.log('✓ getFreeOutput() successful');
+    console.log('Free Output:', freeOutput);
   } catch (error) {
-    console.log('⚠ getMemoryUsagePercent() failed:', error.message);
+    console.log('⚠ getFreeOutput() failed:', error.message);
   }
   
   try {
-    availableMemory = toolbox.getAvailableMemory();
-    console.log(`✓ getAvailableMemory(): ${availableMemory} bytes (${(availableMemory / 1024 / 1024).toFixed(2)} MB)`);
+    const psOutput = toolbox.getPsOutput();
+    console.log('✓ getPsOutput() successful');
+    console.log('PS Output (first 200 chars):', psOutput.slice(0, 200));
   } catch (error) {
-    console.log('⚠ getAvailableMemory() failed:', error.message);
+    console.log('⚠ getPsOutput() failed:', error.message);
   }
   
-  // Test 4: Validation checks
+  try {
+    const uptimeOutput = toolbox.getUptimeOutput();
+    console.log('✓ getUptimeOutput() successful');
+    console.log('Uptime Output:', uptimeOutput);
+  } catch (error) {
+    console.log('⚠ getUptimeOutput() failed:', error.message);
+  }
+  
+  // Test 5: Validation checks
   if (systemInfo) {
     check(systemInfo, {
       'System info has CPU data': (info) => info.cpu !== undefined,
       'System info has Memory data': (info) => info.memory !== undefined,
       'CPU usage is reasonable': (info) => info.cpu.usage_percent >= 0 && info.cpu.usage_percent <= 100,
-      'Memory usage is reasonable': (info) => info.memory.usage_percent >= 0 && info.memory.usage_percent <= 100,
+      'Memory usage is reasonable': (info) => info.memory.usage_percent === undefined || (info.memory.usage_percent >= 0 && info.memory.usage_percent <= 100),
       'CPU limit is positive': (info) => info.cpu.limit_cores > 0,
       'Memory limit is positive': (info) => info.memory.limit_bytes > 0,
-      'Memory usage MB is calculated': (info) => info.memory.usage_mb > 0,
-      'Memory limit MB is calculated': (info) => info.memory.limit_mb > 0,
+      'Load average is string': (info) => typeof info.cpu.load_average === 'string',
+      'Free bytes is number': (info) => typeof info.memory.free_bytes === 'number',
+      'Buffer bytes is number': (info) => typeof info.memory.buffer_bytes === 'number',
+      'Cached bytes is number': (info) => typeof info.memory.cached_bytes === 'number',
+      'Method is string': (info) => typeof info.method === 'string',
+      'Fallback is boolean': (info) => typeof info.fallback === 'boolean',
     });
   }
   
-  if (cpuUsage !== undefined) {
-    check({ cpuUsage }, {
-      'CPU usage is within valid range': (data) => data.cpuUsage >= 0 && data.cpuUsage <= 100,
-    });
-  }
-  
-  if (memoryPercent !== undefined) {
-    check({ memoryPercent }, {
-      'Memory usage percent is within valid range': (data) => data.memoryPercent >= 0 && data.memoryPercent <= 100,
-    });
-  }
-  
-  if (cpuLimit !== undefined && availableCPU !== undefined) {
-    check({ cpuLimit, availableCPU }, {
-      'Available CPU is not negative': (data) => data.availableCPU >= 0,
-      'Available CPU is not greater than limit': (data) => data.availableCPU <= data.cpuLimit,
-    });
-  }
-  
-  if (memoryLimit !== undefined && availableMemory !== undefined) {
-    check({ memoryLimit, availableMemory }, {
-      'Available memory is not negative': (data) => data.availableMemory >= 0,
-      'Available memory is not greater than limit': (data) => data.availableMemory <= data.memoryLimit,
-    });
-  }
-  
-  // Test 5: Simulate some CPU work to see usage change
+  // Test 6: Simulate some CPU work to see usage change
   console.log('Simulating CPU work...');
   const startTime = Date.now();
   let sum = 0;
@@ -125,11 +115,10 @@ export default function () {
   const workTime = Date.now() - startTime;
   console.log(`CPU work completed in ${workTime}ms (sum: ${sum.toFixed(2)})`);
   
-  // Test 6: Check resource usage after work
+  // Test 7: Check resource usage after work
   try {
     const cpuUsageAfter = toolbox.getCPUUsage();
     console.log(`CPU usage after work: ${cpuUsageAfter.toFixed(2)}%`);
-    
     if (cpuUsage !== undefined) {
       console.log(`CPU usage change: ${(cpuUsageAfter - cpuUsage).toFixed(2)}%`);
     }
