@@ -1,13 +1,17 @@
 package toolbox
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.k6.io/k6/js/modules"
 )
@@ -53,6 +57,15 @@ type MemoryInfo struct {
 	FreeBytes      int64   `json:"free_bytes"`
 	BufferBytes    int64   `json:"buffer_bytes"`
 	CachedBytes    int64   `json:"cached_bytes"`
+}
+
+// ConnectivityReport represents the result of connectivity checks at different layers
+type ConnectivityReport struct {
+	Domain         string `json:"domain"`
+	Port           string `json:"port"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+	TCP            string `json:"tcp"`  // e.g. "success" or error message
+	HTTP           string `json:"http"` // e.g. "success" or error message
 }
 
 func init() {
@@ -800,4 +813,63 @@ func readFile(filename string) (string, error) {
 func fileExists(filename string) bool {
 	_, err := os.Stat(filename)
 	return !os.IsNotExist(err)
+}
+
+// CheckConnectivity checks connectivity to a domain at multiple layers (TCP, HTTP)
+// timeoutSeconds: timeout for each check in seconds (default 5 if <=0)
+// port: port to check (default "80" if empty)
+func CheckConnectivity(domain, port string, timeoutSeconds int) ConnectivityReport {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 5
+	}
+	if port == "" {
+		port = "80"
+	}
+	address := net.JoinHostPort(domain, port)
+	report := ConnectivityReport{
+		Domain:         domain,
+		Port:           port,
+		TimeoutSeconds: timeoutSeconds,
+	}
+
+	// TCP check
+	dialer := net.Dialer{Timeout: time.Duration(timeoutSeconds) * time.Second}
+	tcpConn, err := dialer.Dial("tcp", address)
+	if err != nil {
+		report.TCP = err.Error()
+	} else {
+		report.TCP = "success"
+		tcpConn.Close()
+	}
+
+	// HTTP check (only if TCP succeeded)
+	if report.TCP == "success" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+		defer cancel()
+		url := "http://" + address
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			report.HTTP = err.Error()
+		} else {
+			client := &http.Client{
+				Timeout: time.Duration(timeoutSeconds) * time.Second,
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				report.HTTP = err.Error()
+			} else {
+				report.HTTP = resp.Status
+				resp.Body.Close()
+			}
+		}
+	} else {
+		report.HTTP = "skipped (TCP failed)"
+	}
+
+	return report
+}
+
+// CheckConnectivity exposes CheckConnectivity to k6 JavaScript
+func (Toolbox) CheckConnectivity(domain string, port string, timeoutSeconds int) ConnectivityReport {
+	return CheckConnectivity(domain, port, timeoutSeconds)
 }

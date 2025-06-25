@@ -83,6 +83,43 @@ const info = toolbox.getSystemInfoCommand();
 | `getPsOutput()` | `string` | Raw `ps aux` output |
 | `getUptimeOutput()` | `string` | Raw `uptime` output |
 
+### Connectivity Check
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `checkConnectivity(domain, port, timeout)` | `ConnectivityReport` | Checks TCP and HTTP connectivity to the given domain and port, with a configurable timeout (seconds, default 5). |
+
+#### Example
+
+```javascript
+import toolbox from 'k6/x/toolbox';
+
+export default function() {
+    const report = toolbox.checkConnectivity('google.com', '80', 5);
+    console.log('Connectivity Report:', JSON.stringify(report, null, 2));
+    // Example output:
+    // {
+    //   domain: 'google.com',
+    //   port: '80',
+    //   timeout_seconds: 5,
+    //   tcp: 'success',
+    //   http: '200 OK'
+    // }
+}
+```
+
+#### ConnectivityReport Structure
+
+```javascript
+{
+  domain: 'string',           // The domain checked
+  port: 'string',             // The port checked
+  timeout_seconds: number,    // Timeout used for each check
+  tcp: 'success' | string,    // 'success' or error message
+  http: 'success' | string    // HTTP status or error/skipped message
+}
+```
+
 ## Data Structures
 
 ### SystemInfo

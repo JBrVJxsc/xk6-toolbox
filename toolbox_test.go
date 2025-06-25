@@ -561,3 +561,31 @@ func BenchmarkGetCPULimit(b *testing.B) {
 		_, _ = toolbox.GetCPULimit()
 	}
 }
+
+func TestCheckConnectivity(t *testing.T) {
+	domain := "google.com"
+	port := "80"
+	timeout := 5
+
+	report := CheckConnectivity(domain, port, timeout)
+
+	if report.Domain != domain {
+		t.Errorf("Expected domain %s, got %s", domain, report.Domain)
+	}
+	if report.Port != port {
+		t.Errorf("Expected port %s, got %s", port, report.Port)
+	}
+	if report.TimeoutSeconds != timeout {
+		t.Errorf("Expected timeout %d, got %d", timeout, report.TimeoutSeconds)
+	}
+
+	t.Logf("TCP result: %s", report.TCP)
+	t.Logf("HTTP result: %s", report.HTTP)
+
+	if report.TCP != "success" {
+		t.Errorf("Expected TCP success, got %s", report.TCP)
+	}
+	if report.HTTP == "" || report.HTTP == "skipped (TCP failed)" {
+		t.Errorf("Expected HTTP result, got %s", report.HTTP)
+	}
+}

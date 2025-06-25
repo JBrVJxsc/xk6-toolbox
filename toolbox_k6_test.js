@@ -259,6 +259,24 @@ export default function () {
     });
   }
   
+  // Test: Connectivity check (TCP/HTTP)
+  try {
+    const domain = 'google.com';
+    const port = '80';
+    const timeout = 5;
+    const connReport = toolbox.checkConnectivity(domain, port, timeout);
+    console.log(`\u2713 checkConnectivity(${domain}, ${port}, ${timeout})`);
+    console.log('Connectivity Report:', JSON.stringify(connReport, null, 2));
+    check(connReport, {
+      'Domain matches': (r) => r.domain === domain,
+      'Port matches': (r) => r.port === port,
+      'TCP success': (r) => r.tcp === 'success',
+      'HTTP result present': (r) => typeof r.http === 'string' && r.http.length > 0 && r.http !== 'skipped (TCP failed)',
+    });
+  } catch (error) {
+    console.log('\u26a0 checkConnectivity() failed:', error.message);
+  }
+  
   // Cleanup large array to free memory
   tempArray.length = 0;
   
