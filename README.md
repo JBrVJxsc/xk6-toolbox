@@ -76,6 +76,13 @@ export default function() {
 |--------|-------------|-------------|
 | `checkConnectivity(domain, port, timeout)` | `ConnectivityReport` | Checks TCP and HTTP connectivity to the given domain and port, with a configurable timeout (seconds, default 5). |
 
+### OS Detection
+
+| Method | Return Type | Description |
+|---|---|---|
+| `isMacOS()` | `boolean` | Returns `true` if the current operating system is macOS. |
+| `isLinux()` | `boolean` | Returns `true` if the current operating system is Linux. |
+
 #### Example
 
 ```javascript

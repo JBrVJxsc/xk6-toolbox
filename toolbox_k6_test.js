@@ -119,6 +119,20 @@ export default function () {
     console.log('⚠ checkConnectivity() failed:', error.message);
   }
   
+  // Test: OS Detection
+  try {
+    const isMac = toolbox.isMacOS();
+    const isLinux = toolbox.isLinux();
+    console.log(`✓ OS Detection: isMacOS=${isMac}, isLinux=${isLinux}`);
+    check(null, {
+      'OS Detection: isMacOS is boolean': () => typeof isMac === 'boolean',
+      'OS Detection: isLinux is boolean': () => typeof isLinux === 'boolean',
+      'OS Detection: Flags are mutually exclusive': () => isMac !== isLinux || (!isMac && !isLinux),
+    });
+  } catch (error) {
+    console.log('⚠ OS Detection failed:', error.message);
+  }
+  
   console.log('=== Test iteration completed ===\n');
   
   sleep(1);

@@ -983,3 +983,13 @@ func CheckConnectivity(domain, port string, timeoutSeconds int) ConnectivityRepo
 func (Toolbox) CheckConnectivity(domain string, port string, timeoutSeconds int) ConnectivityReport {
 	return CheckConnectivity(domain, port, timeoutSeconds)
 }
+
+// IsMacOS returns true if the current OS is macOS (darwin)
+func (Toolbox) IsMacOS() bool {
+	return isMacOS()
+}
+
+// IsLinux returns true if the current OS is Linux
+func (Toolbox) IsLinux() bool {
+	return isLinux()
+}
