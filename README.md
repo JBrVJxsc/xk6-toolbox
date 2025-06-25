@@ -1,87 +1,74 @@
 # K6 Toolbox Extension
 
-A comprehensive system monitoring extension for k6 that provides CPU and memory metrics in containerized environments, specifically designed for EKS/Docker deployments.
+A comprehensive system monitoring extension for k6 that provides CPU and memory metrics in containerized environments (like Docker and EKS) and on macOS.
 
 ## Features
 
-- 🔄 **Automatic Fallback**: Tries cgroup first, falls back to system commands
-- 📊 **Comprehensive Metrics**: CPU usage, memory usage, limits, and availability
-- 🐳 **Container-Aware**: Reads actual container limits from cgroup v1/v2
-- 🛡️ **Alpine Compatible**: Works with BusyBox commands in Alpine containers
-- ⚡ **Performance**: Optimized for minimal overhead
-- 📈 **Real-time**: Kernel-level accuracy for container resource monitoring
+- 📊 **Comprehensive Metrics**: CPU usage, memory usage, limits, and availability.
+- 🐳 **Container-Aware**: Reads actual container limits from cgroup v1/v2 on Linux.
+- 🍏 **macOS Support**: Uses native system commands for resource metrics on macOS.
+- 🛡️ **Alpine Compatible**: Works with BusyBox commands in Alpine containers.
+- ⚡ **Performance**: Optimized for minimal overhead.
+- 📈 **Real-time**: Kernel-level accuracy for container resource monitoring.
 
 ## Installation
 
-Build the k6 binary with the toolbox extension:
+Build the k6 binary with the extension:
 
 ```bash
-# Build k6 with toolbox extension
-xk6 build --with github.com/your-org/k6-toolbox-extension@latest
+# Build k6 with the extension
+xk6 build --with github.com/JBrVJxsc/xk6-toolbox@latest
 ```
 
 ## Quick Start
 
 ```javascript
 import toolbox from 'k6/x/toolbox';
+import { sleep } from 'k6';
 
 export default function() {
-    // Get complete system information
-    const info = toolbox.getSystemInfo();
-    console.log(`CPU: ${info.cpu.usage_percent}%, Memory: ${info.memory.usage_percent}%`);
-    
-    // Check if resources are available
-    if (info.memory.usage_percent > 80) {
-        console.warn(`High memory usage: ${info.memory.usage_mb}MB/${info.memory.limit_mb}MB`);
+    // Get individual CPU and memory usage stats
+    const cpuUsage = toolbox.getCPUUsage();
+    const memoryUsagePercent = toolbox.getMemoryUsagePercent();
+
+    console.log(`CPU: ${cpuUsage.toFixed(1)}%, Memory: ${memoryUsagePercent.toFixed(1)}%`);
+
+    // Alert if memory usage is high
+    if (memoryUsagePercent > 80) {
+        const memoryUsageBytes = toolbox.getMemoryUsage();
+        const memoryLimitBytes = toolbox.getMemoryLimit();
+        console.warn(`High memory usage: ${(memoryUsageBytes / 1024 / 1024).toFixed(1)}MB / ${(memoryLimitBytes / 1024 / 1024).toFixed(1)}MB`);
     }
+
+    sleep(1);
 }
 ```
 
 ## API Reference
 
-### System Overview
-
-#### `getSystemInfo()`
-Returns comprehensive system information with automatic fallback.
-
-```javascript
-const info = toolbox.getSystemInfo();
-// Returns: SystemInfo object with CPU, Memory, Method, Fallback fields
-```
-
-#### `getSystemInfoCommand()`
-Forces command-based monitoring (no cgroup files).
-
-```javascript
-const info = toolbox.getSystemInfoCommand();
-// Returns: SystemInfo object using only system commands
-```
-
 ### CPU Metrics
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `getCPUUsage()` | `float64` | Current CPU usage percentage (0-100) |
-| `getCPULimit()` | `float64` | CPU limit in cores |
-| `getAvailableCPU()` | `float64` | Available CPU cores (limit - usage) |
+| `getCPUUsage()` | `float64` | Current CPU usage percentage (0-100). |
+| `getCPULimit()` | `float64` | CPU limit in cores. |
+| `getAvailableCPU()` | `float64` | Available CPU cores (limit - usage). |
 
 ### Memory Metrics
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `getMemoryUsage()` | `int64` | Current memory usage in bytes |
-| `getMemoryLimit()` | `int64` | Memory limit in bytes |
-| `getMemoryUsagePercent()` | `float64` | Memory usage percentage (0-100) |
-| `getAvailableMemory()` | `int64` | Available memory in bytes |
+| `getMemoryUsage()` | `int64` | Current memory usage in bytes. |
+| `getMemoryLimit()` | `int64` | Memory limit in bytes. |
+| `getMemoryUsagePercent()` | `float64` | Memory usage percentage (0-100). |
+| `getAvailableMemory()` | `int64` | Available memory in bytes. |
 
 ### Raw Command Output
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `getTopOutput()` | `string` | Raw `top -b -n 1` output |
-| `getFreeOutput()` | `string` | Raw `free -b` output |
-| `getPsOutput()` | `string` | Raw `ps aux` output |
-| `getUptimeOutput()` | `string` | Raw `uptime` output |
+| `getPsOutput()` | `string` | Raw `ps aux` output. |
+| `getUptimeOutput()` | `string` | Raw `uptime` output. |
 
 ### Connectivity Check
 
@@ -99,11 +86,11 @@ export default function() {
     console.log('Connectivity Report:', JSON.stringify(report, null, 2));
     // Example output:
     // {
-    //   domain: 'google.com',
-    //   port: '80',
-    //   timeout_seconds: 5,
-    //   tcp: 'success',
-    //   http: '200 OK'
+    //   "domain": "google.com",
+    //   "port": "80",
+    //   "timeout_seconds": 5,
+    //   "tcp": "success",
+    //   "http": "200 OK"
     // }
 }
 ```
@@ -112,41 +99,11 @@ export default function() {
 
 ```javascript
 {
-  domain: 'string',           // The domain checked
-  port: 'string',             // The port checked
-  timeout_seconds: number,    // Timeout used for each check
-  tcp: 'success' | string,    // 'success' or error message
-  http: 'success' | string    // HTTP status or error/skipped message
-}
-```
-
-## Data Structures
-
-### SystemInfo
-
-```javascript
-{
-    cpu: {
-        usage_percent: 45.2,      // Current CPU usage %
-        limit_cores: 4.0,         // CPU limit in cores
-        used_cores: 1.8,          // Currently used cores
-        available_cores: 2.2,     // Available cores
-        load_average: "1.2, 1.5, 1.8"  // System load average
-    },
-    memory: {
-        usage_bytes: 1073741824,   // Memory usage in bytes
-        limit_bytes: 2147483648,   // Memory limit in bytes
-        available_bytes: 1073741824,  // Available memory
-        usage_percent: 50.0,       // Memory usage %
-        usage_mb: 1024.0,         // Usage in MB
-        limit_mb: 2048.0,         // Limit in MB
-        available_mb: 1024.0,     // Available in MB
-        free_bytes: 536870912,    // Free memory (from free command)
-        buffer_bytes: 268435456,  // Buffer memory
-        cached_bytes: 268435456   // Cached memory
-    },
-    method: "cgroup",             // "cgroup", "command", or "mixed"
-    fallback: false               // Whether fallback was used
+  "domain": "string",           // The domain checked
+  "port": "string",             // The port checked
+  "timeout_seconds": number,    // Timeout used for each check
+  "tcp": "string",              // 'success' or error message
+  "http": "string"              // HTTP status or error/skipped message
 }
 ```
 
@@ -156,23 +113,25 @@ export default function() {
 
 ```javascript
 import toolbox from 'k6/x/toolbox';
+import { sleep } from 'k6';
 
 export default function() {
     // Monitor resources every 10 iterations
     if (__ITER % 10 === 0) {
         const cpu = toolbox.getCPUUsage();
         const memory = toolbox.getMemoryUsagePercent();
-        
+
         console.log(`Iteration ${__ITER}: CPU=${cpu.toFixed(1)}%, Memory=${memory.toFixed(1)}%`);
-        
+
         // Alert if resources are constrained
         if (cpu > 90 || memory > 85) {
             console.error(`⚠️  Resource constraint detected!`);
         }
     }
-    
+
     // Your test logic here
     // ...
+    sleep(1);
 }
 ```
 
@@ -180,21 +139,23 @@ export default function() {
 
 ```javascript
 import toolbox from 'k6/x/toolbox';
+import { sleep } from 'k6';
 
 export function setup() {
-    const info = toolbox.getSystemInfo();
-    console.log(`Test starting with ${info.memory.available_mb.toFixed(0)}MB available memory`);
-    return { initialMemory: info.memory.usage_bytes };
+    const initialMemory = toolbox.getMemoryUsage();
+    console.log(`Test starting with ${(initialMemory / 1024 / 1024).toFixed(0)}MB used memory`);
+    return { initialMemory };
 }
 
 export default function(data) {
     // Track memory growth
     const currentMemory = toolbox.getMemoryUsage();
     const memoryGrowth = currentMemory - data.initialMemory;
-    
+
     if (memoryGrowth > 100 * 1024 * 1024) { // 100MB growth
         console.warn(`Memory increased by ${(memoryGrowth / 1024 / 1024).toFixed(1)}MB`);
     }
+    sleep(1);
 }
 ```
 
@@ -204,22 +165,26 @@ export default function(data) {
 import toolbox from 'k6/x/toolbox';
 
 export function setup() {
-    const info = toolbox.getSystemInfo();
-    
+    const cpuLimit = toolbox.getCPULimit();
+    const memoryLimit = toolbox.getMemoryLimit();
+
     // Validate container has sufficient resources
     const minCPU = 2.0;
     const minMemoryGB = 4.0;
-    
-    if (info.cpu.limit_cores < minCPU) {
-        throw new Error(`Insufficient CPU: ${info.cpu.limit_cores} cores (need ${minCPU})`);
+
+    if (cpuLimit < minCPU) {
+        throw new Error(`Insufficient CPU: ${cpuLimit} cores (need ${minCPU})`);
     }
-    
-    if (info.memory.limit_mb < minMemoryGB * 1024) {
-        throw new Error(`Insufficient memory: ${info.memory.limit_mb}MB (need ${minMemoryGB * 1024}MB)`);
+
+    if (memoryLimit < (minMemoryGB * 1024 * 1024 * 1024)) {
+        throw new Error(`Insufficient memory: ${(memoryLimit / 1024 / 1024).toFixed(0)}MB (need ${minMemoryGB * 1024}MB)`);
     }
-    
-    console.log(`✅ Resource validation passed: ${info.cpu.limit_cores} cores, ${info.memory.limit_mb}MB`);
-    console.log(`📊 Detection method: ${info.method} ${info.fallback ? '(with fallback)' : ''}`);
+
+    console.log(`✅ Resource validation passed: ${cpuLimit} cores, ${(memoryLimit / 1024 / 1024).toFixed(0)}MB`);
+}
+
+export default function() {
+    // test logic
 }
 ```
 
@@ -227,26 +192,30 @@ export function setup() {
 
 ```javascript
 import toolbox from 'k6/x/toolbox';
+import { sleep } from 'k6';
 
 let previousCPU = 0;
 let cpuSpikes = 0;
 
+export function setup() {
+    previousCPU = toolbox.getCPUUsage();
+}
+
 export default function() {
     const currentCPU = toolbox.getCPUUsage();
-    
+
     // Detect CPU spikes
     if (currentCPU > previousCPU + 20) {
         cpuSpikes++;
         console.warn(`CPU spike detected: ${previousCPU.toFixed(1)}% → ${currentCPU.toFixed(1)}%`);
     }
-    
+
     previousCPU = currentCPU;
+    sleep(1);
 }
 
 export function teardown() {
-    const finalInfo = toolbox.getSystemInfo();
-    console.log(`Test completed. CPU spikes: ${cpuSpikes}`);
-    console.log(`Final resource usage: CPU=${finalInfo.cpu.usage_percent.toFixed(1)}%, Memory=${finalInfo.memory.usage_percent.toFixed(1)}%`);
+    console.log(`Test completed. CPU spikes detected: ${cpuSpikes}`);
 }
 ```
 

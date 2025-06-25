@@ -1,4 +1,3 @@
-import toolbox from 'k6/x/toolbox';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -16,13 +15,13 @@ export const options = {
 
 export default function () {
   // Monitor resources before making requests
-  const resourcesBefore = toolbox.getSystemInfo();
+  // const resourcesBefore = toolbox.getSystemInfo();
   
   // Make HTTP request
   const response = http.get('https://httpbin.org/delay/1');
   
   // Monitor resources after making requests
-  const resourcesAfter = toolbox.getSystemInfo();
+  // const resourcesAfter = toolbox.getSystemInfo();
   
   // Check response
   check(response, {
@@ -31,21 +30,21 @@ export default function () {
   });
   
   // Log resource usage if it changed significantly
-  const cpuChange = resourcesAfter.cpu.usage_percent - resourcesBefore.cpu.usage_percent;
-  const memoryChange = resourcesAfter.memory.usage_percent - resourcesBefore.memory.usage_percent;
+  // const cpuChange = resourcesAfter.cpu.usage_percent - resourcesBefore.cpu.usage_percent;
+  // const memoryChange = resourcesAfter.memory.usage_percent - resourcesBefore.memory.usage_percent;
   
-  if (Math.abs(cpuChange) > 5 || Math.abs(memoryChange) > 2) {
-    console.log(`VU ${__VU}: CPU change: ${cpuChange.toFixed(1)}%, Memory change: ${memoryChange.toFixed(1)}%`);
-  }
+  // if (Math.abs(cpuChange) > 5 || Math.abs(memoryChange) > 2) {
+  //   console.log(`VU ${__VU}: CPU change: ${cpuChange.toFixed(1)}%, Memory change: ${memoryChange.toFixed(1)}%`);
+  // }
   
   // Check for resource constraints
-  if (resourcesAfter.cpu.usage_percent > 90) {
-    console.warn(`VU ${__VU}: High CPU usage detected: ${resourcesAfter.cpu.usage_percent.toFixed(1)}%`);
-  }
+  // if (resourcesAfter.cpu.usage_percent > 90) {
+  //   console.warn(`VU ${__VU}: High CPU usage detected: ${resourcesAfter.cpu.usage_percent.toFixed(1)}%`);
+  // }
   
-  if (resourcesAfter.memory.usage_percent > 90) {
-    console.warn(`VU ${__VU}: High memory usage detected: ${resourcesAfter.memory.usage_percent.toFixed(1)}%`);
-  }
+  // if (resourcesAfter.memory.usage_percent > 90) {
+  //   console.warn(`VU ${__VU}: High memory usage detected: ${resourcesAfter.memory.usage_percent.toFixed(1)}%`);
+  // }
   
   sleep(1);
 }

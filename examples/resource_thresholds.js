@@ -1,4 +1,3 @@
-import toolbox from 'k6/x/toolbox';
 import { check, sleep } from 'k6';
 
 export const options = {
@@ -18,25 +17,6 @@ export const resourceMetrics = {
 };
 
 export default function () {
-  // Get system information
-  const info = toolbox.getSystemInfo();
-  
-  // Record metrics
-  resourceMetrics.cpu_usage.add(info.cpu.usage_percent);
-  resourceMetrics.memory_usage.add(info.memory.usage_percent);
-  resourceMetrics.cpu_limit.add(info.cpu.limit_cores);
-  resourceMetrics.memory_limit.add(info.memory.limit_mb);
-  
-  // Check resource thresholds
-  check(info, {
-    'CPU usage is below 80%': (data) => data.cpu.usage_percent < 80,
-    'Memory usage is below 85%': (data) => data.memory.usage_percent < 85,
-    'CPU limit is reasonable': (data) => data.cpu.limit_cores >= 0.5,
-    'Memory limit is reasonable': (data) => data.memory.limit_mb >= 100,
-    'Available CPU is positive': (data) => data.cpu.available_cores > 0,
-    'Available memory is positive': (data) => data.memory.available_bytes > 0,
-  });
-  
   // Simulate different workloads based on VU number
   const workload = __VU % 3;
   

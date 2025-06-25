@@ -1,4 +1,3 @@
-import toolbox from 'k6/x/toolbox';
 import { sleep } from 'k6';
 
 export const options = {
@@ -7,9 +6,6 @@ export const options = {
 };
 
 export default function () {
-  // Get system information
-  const info = toolbox.getSystemInfo();
-  
   // Log current resource usage
   console.log(`[${new Date().toISOString()}] Resource Usage:`);
   console.log(`  CPU: ${info.cpu.used_cores.toFixed(2)}/${info.cpu.limit_cores.toFixed(2)} cores (${info.cpu.usage_percent.toFixed(1)}%)`);

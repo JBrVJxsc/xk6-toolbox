@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -76,84 +77,6 @@ func init() {
 // It provides functions for monitoring system resources in containerized environments.
 type Toolbox struct{}
 
-// GetSystemInfo returns comprehensive system resource information
-// Uses multiple methods with automatic fallback
-func (Toolbox) GetSystemInfo() (SystemInfo, error) {
-	var info SystemInfo
-	var err error
-
-	// Try cgroup method first
-	info.CPU, err = getCPUInfoCgroup()
-	if err != nil {
-		// Fall back to command-based method
-		info.CPU, err = getCPUInfoCommand()
-		if err != nil {
-			return info, fmt.Errorf("failed to get CPU info: %w", err)
-		}
-		info.Fallback = true
-		info.Method = "command"
-	} else {
-		info.Method = "cgroup"
-	}
-
-	info.Memory, err = getMemoryInfoCgroup()
-	if err != nil {
-		// Fall back to command-based method
-		info.Memory, err = getMemoryInfoCommand()
-		if err != nil {
-			return info, fmt.Errorf("failed to get memory info: %w", err)
-		}
-		info.Fallback = true
-		if info.Method == "cgroup" {
-			info.Method = "mixed"
-		} else {
-			info.Method = "command"
-		}
-	}
-
-	return info, nil
-}
-
-// GetSystemInfoCommand forces using command-based monitoring only
-func (Toolbox) GetSystemInfoCommand() (SystemInfo, error) {
-	var info SystemInfo
-	var err error
-
-	info.CPU, err = getCPUInfoCommand()
-	if err != nil {
-		return info, fmt.Errorf("failed to get CPU info via commands: %w", err)
-	}
-
-	info.Memory, err = getMemoryInfoCommand()
-	if err != nil {
-		return info, fmt.Errorf("failed to get memory info via commands: %w", err)
-	}
-
-	info.Method = "command"
-	info.Fallback = false
-	return info, nil
-}
-
-// GetTopOutput returns raw output from the `top` command
-func (Toolbox) GetTopOutput() (string, error) {
-	cmd := exec.Command("top", "-b", "-n", "1")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", ErrCommandFailed, err)
-	}
-	return string(output), nil
-}
-
-// GetFreeOutput returns raw output from the `free` command
-func (Toolbox) GetFreeOutput() (string, error) {
-	cmd := exec.Command("free", "-b") // Output in bytes
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", ErrCommandFailed, err)
-	}
-	return string(output), nil
-}
-
 // GetPsOutput returns raw output from the `ps` command
 func (Toolbox) GetPsOutput() (string, error) {
 	cmd := exec.Command("ps", "aux")
@@ -176,6 +99,16 @@ func (Toolbox) GetUptimeOutput() (string, error) {
 
 // GetCPUUsage returns current CPU usage percentage
 func (Toolbox) GetCPUUsage() (float64, error) {
+	if isMacOS() {
+		cpuInfo, err := getCPUInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+		if cpuInfo.UsagePercent < 0 || cpuInfo.UsagePercent > 100 {
+			return 0, errors.New("invalid CPU usage percent")
+		}
+		return cpuInfo.UsagePercent, nil
+	}
 	cpuInfo, err := getCPUInfoCgroup()
 	if err != nil {
 		cpuInfo, err = getCPUInfoCommand()
@@ -210,6 +143,16 @@ func (Toolbox) GetMemoryLimit() (int64, error) {
 
 // GetMemoryUsagePercent returns memory usage as a percentage
 func (Toolbox) GetMemoryUsagePercent() (float64, error) {
+	if isMacOS() {
+		memInfo, err := getMemoryInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+		if memInfo.UsagePercent < 0 || memInfo.UsagePercent > 100 {
+			return 0, errors.New("invalid memory usage percent")
+		}
+		return memInfo.UsagePercent, nil
+	}
 	memInfo, err := getMemoryInfoCgroup()
 	if err != nil {
 		memInfo, err = getMemoryInfoCommand()
@@ -246,18 +189,56 @@ func (Toolbox) GetAvailableCPU() (float64, error) {
 
 // Command-based implementations
 
+// Helper to detect OS
+func isMacOS() bool {
+	return runtime.GOOS == "darwin"
+}
+
+func isLinux() bool {
+	return runtime.GOOS == "linux"
+}
+
 // getCPUInfoCommand gets CPU info using system commands
 func getCPUInfoCommand() (CPUInfo, error) {
 	var info CPUInfo
 
-	// Get CPU count
+	if isMacOS() {
+		// macOS: use sysctl and top
+		cores, err := getCPUCoresCommand()
+		if err != nil {
+			return info, err
+		}
+		info.LimitCores = cores
+
+		usage, err := getCPUUsageFromTop()
+		if err != nil {
+			return info, err
+		}
+		info.UsagePercent = usage
+		info.UsedCores = (usage / 100.0) * cores
+		info.Available = cores - info.UsedCores
+
+		loadAvg, err := getLoadAverage()
+		if err == nil {
+			info.LoadAverage = loadAvg
+		}
+		// Defensive: ensure all fields are set
+		if info.UsagePercent < 0 || info.UsagePercent > 100 {
+			return info, errors.New("invalid CPU usage percent")
+		}
+		if info.LimitCores <= 0 {
+			return info, errors.New("invalid CPU core count")
+		}
+		return info, nil
+	}
+
+	// Linux (default):
 	cores, err := getCPUCoresCommand()
 	if err != nil {
 		return info, err
 	}
 	info.LimitCores = cores
 
-	// Get CPU usage from top
 	usage, err := getCPUUsageFromTop()
 	if err != nil {
 		return info, err
@@ -266,7 +247,6 @@ func getCPUInfoCommand() (CPUInfo, error) {
 	info.UsedCores = (usage / 100.0) * cores
 	info.Available = cores - info.UsedCores
 
-	// Get load average
 	loadAvg, err := getLoadAverage()
 	if err == nil {
 		info.LoadAverage = loadAvg
@@ -279,7 +259,27 @@ func getCPUInfoCommand() (CPUInfo, error) {
 func getMemoryInfoCommand() (MemoryInfo, error) {
 	var info MemoryInfo
 
-	// Use free command to get memory info
+	if isMacOS() {
+		// macOS: use vm_stat and sysctl
+		output, err := exec.Command("vm_stat").Output()
+		if err != nil {
+			return info, fmt.Errorf("%s: %w", ErrCommandFailed, err)
+		}
+		info, err = parseVMStatOutput(string(output))
+		if err != nil {
+			return info, err
+		}
+		// Defensive: ensure all fields are set
+		if info.UsagePercent < 0 || info.UsagePercent > 100 {
+			return info, errors.New("invalid memory usage percent")
+		}
+		if info.LimitBytes <= 0 {
+			return info, errors.New("invalid memory limit")
+		}
+		return info, nil
+	}
+
+	// Linux (default):
 	output, err := exec.Command("free", "-b").Output()
 	if err != nil {
 		return info, fmt.Errorf("%s: %w", ErrCommandFailed, err)
@@ -290,28 +290,47 @@ func getMemoryInfoCommand() (MemoryInfo, error) {
 
 // getCPUCoresCommand gets number of CPU cores
 func getCPUCoresCommand() (float64, error) {
+	if isMacOS() {
+		output, err := exec.Command("sysctl", "-n", "hw.ncpu").Output()
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", ErrCommandFailed, err)
+		}
+		cores, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", ErrParsingValue, err)
+		}
+		return cores, nil
+	}
+	// Linux (default):
 	output, err := exec.Command("nproc").Output()
 	if err != nil {
 		// Fallback to parsing /proc/cpuinfo
 		return getCPUCoresFromProcInfo()
 	}
-
 	cores, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", ErrParsingValue, err)
 	}
-
 	return cores, nil
 }
 
 // getCPUUsageFromTop parses CPU usage from top command
 func getCPUUsageFromTop() (float64, error) {
+	if isMacOS() {
+		// macOS: top -l 1 | grep 'CPU usage'
+		cmd := exec.Command("sh", "-c", "top -l 1 | grep 'CPU usage'")
+		output, err := cmd.Output()
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", ErrCommandFailed, err)
+		}
+		return parseTopCPUUsage(string(output))
+	}
+	// Linux (default):
 	cmd := exec.Command("top", "-b", "-n", "1")
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", ErrCommandFailed, err)
 	}
-
 	return parseTopCPUUsage(string(output))
 }
 
@@ -319,9 +338,29 @@ func getCPUUsageFromTop() (float64, error) {
 func parseTopCPUUsage(output string) (float64, error) {
 	lines := strings.Split(output, "\n")
 
-	// Look for CPU usage line (varies by top version)
-	cpuRegex := regexp.MustCompile(`%Cpu\(s\):\s*([0-9.]+)\s*us,\s*([0-9.]+)\s*sy,.*?([0-9.]+)\s*id`)
+	if isMacOS() {
+		// macOS: look for 'CPU usage: xx.x% user, yy.y% sys, zz.z% idle'
+		for _, line := range lines {
+			if strings.Contains(line, "CPU usage:") {
+				// Example: CPU usage: 7.98% user, 5.32% sys, 86.69% idle
+				parts := strings.Split(line, ",")
+				var idle float64
+				for _, part := range parts {
+					if strings.Contains(part, "idle") {
+						fields := strings.Fields(part)
+						if len(fields) > 0 {
+							val := strings.TrimSuffix(fields[0], "%")
+							idle, _ = strconv.ParseFloat(val, 64)
+						}
+					}
+				}
+				return 100 - idle, nil
+			}
+		}
+	}
 
+	// Linux (default):
+	cpuRegex := regexp.MustCompile(`%Cpu\(s\):\s*([0-9.]+)\s*us,\s*([0-9.]+)\s*sy,.*?([0-9.]+)\s*id`)
 	for _, line := range lines {
 		if strings.Contains(line, "Cpu(s)") || strings.Contains(line, "%Cpu") {
 			matches := cpuRegex.FindStringSubmatch(line)
@@ -333,7 +372,6 @@ func parseTopCPUUsage(output string) (float64, error) {
 				return 100 - idle, nil
 			}
 		}
-
 		// Alternative parsing for different top formats
 		if strings.Contains(line, "CPU usage:") {
 			parts := strings.Fields(line)
@@ -348,11 +386,10 @@ func parseTopCPUUsage(output string) (float64, error) {
 			}
 		}
 	}
-
 	return 0, errors.New("could not parse CPU usage from top output")
 }
 
-// parseFreeCmdOutput parses the output of the free command
+// parseFreeCmdOutput parses the output of the free command (Linux only)
 func parseFreeCmdOutput(output string) (MemoryInfo, error) {
 	var info MemoryInfo
 
@@ -418,6 +455,55 @@ func parseFreeCmdOutput(output string) (MemoryInfo, error) {
 	}
 
 	return info, errors.New("memory information not found in free output")
+}
+
+// parseVMStatOutput parses the output of vm_stat (macOS only)
+func parseVMStatOutput(output string) (MemoryInfo, error) {
+	var info MemoryInfo
+	pageSize := int64(4096) // default page size
+
+	// Get page size from sysctl
+	out, err := exec.Command("sysctl", "-n", "hw.pagesize").Output()
+	if err == nil {
+		if sz, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64); err == nil {
+			pageSize = sz
+		}
+	}
+
+	lines := strings.Split(output, "\n")
+	stats := make(map[string]int64)
+	for _, line := range lines {
+		parts := strings.Split(line, ":")
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(strings.TrimSuffix(parts[1], "."))
+			if v, err := strconv.ParseInt(val, 10, 64); err == nil {
+				stats[key] = v
+			}
+		}
+	}
+
+	totalPages := stats["Pages free"] + stats["Pages active"] + stats["Pages inactive"] + stats["Pages speculative"] + stats["Pages wired down"] + stats["Pages throttled"] + stats["Pages purgeable"] + stats["File-backed pages"] + stats["Anonymous pages"]
+	freePages := stats["Pages free"] + stats["Pages speculative"]
+	usedPages := totalPages - freePages
+
+	total := totalPages * pageSize
+	used := usedPages * pageSize
+	free := freePages * pageSize
+
+	info.LimitBytes = total
+	info.UsageBytes = used
+	info.FreeBytes = free
+	info.AvailableBytes = free
+	info.UsagePercent = (float64(used) / float64(total)) * 100
+	info.UsageMB = float64(used) / (1024 * 1024)
+	info.LimitMB = float64(total) / (1024 * 1024)
+	info.AvailableMB = float64(free) / (1024 * 1024)
+	// macOS does not have buffer/cache in the same way
+	info.BufferBytes = 0
+	info.CachedBytes = 0
+
+	return info, nil
 }
 
 // getLoadAverage gets system load average
@@ -512,8 +598,11 @@ func getMemoryInfoCgroup() (MemoryInfo, error) {
 	return info, nil
 }
 
-// getCPULimit reads CPU limit from cgroup
+// getCPULimit returns the CPU limit in cores
 func getCPULimit() (float64, error) {
+	if isMacOS() {
+		return getCPUCoresCommand()
+	}
 	// Try cgroup v2 first
 	if limit, err := readCgroupV2CPULimit(); err == nil {
 		return limit, nil
@@ -525,6 +614,13 @@ func getCPULimit() (float64, error) {
 
 // getCPUUsage calculates current CPU usage
 func getCPUUsage() (float64, error) {
+	if isMacOS() {
+		cpuInfo, err := getCPUInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+		return cpuInfo.UsedCores, nil
+	}
 	// Read CPU usage from cgroup
 	if usage, err := readCgroupCPUUsage(); err == nil {
 		return usage, nil
@@ -534,8 +630,15 @@ func getCPUUsage() (float64, error) {
 	return readProcStatCPUUsage()
 }
 
-// getMemoryLimit reads memory limit from cgroup
+// getMemoryLimit returns the memory limit in bytes
 func getMemoryLimit() (int64, error) {
+	if isMacOS() {
+		memInfo, err := getMemoryInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+		return memInfo.LimitBytes, nil
+	}
 	// Try cgroup v2 first
 	if limit, err := readCgroupV2MemoryLimit(); err == nil {
 		return limit, nil
@@ -545,8 +648,15 @@ func getMemoryLimit() (int64, error) {
 	return readCgroupV1MemoryLimit()
 }
 
-// getMemoryUsage reads current memory usage from cgroup
+// getMemoryUsage returns the memory usage in bytes
 func getMemoryUsage() (int64, error) {
+	if isMacOS() {
+		memInfo, err := getMemoryInfoCommand()
+		if err != nil {
+			return 0, err
+		}
+		return memInfo.UsageBytes, nil
+	}
 	// Try cgroup v2 first
 	if usage, err := readCgroupV2MemoryUsage(); err == nil {
 		return usage, nil
